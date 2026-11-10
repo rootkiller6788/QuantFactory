@@ -71,14 +71,18 @@ def _momentum_step(
     vW: list[list[list[float]]],
     vb: list[list[float]],
     *,
+    norm: float,
     lr: float,
     inv_batch: float,
     clip: float,
     momentum: float,
     weight_decay: float,
 ) -> None:
-    """`v ← μ·v − lr·(g/B)·s`；`θ ← θ + v − lr·wd·θ`。就地改 `model` 与动量缓冲。"""
-    norm = grad_norm(dW, db, inv_batch=inv_batch)
+    """`v ← μ·v − lr·(g/B)·s`；`θ ← θ + v − lr·wd·θ`。就地改 `model` 与动量缓冲。
+
+    `norm` 由调用方传入 —— 训练循环本来就要记录它、判断裁剪是否触发，
+    在这里重算一遍等于每一步把全部梯度再扫一次。
+    """
     scale = (clip / norm) if (norm > clip > 0.0) else 1.0
     k = lr * inv_batch * scale
 
@@ -149,7 +153,7 @@ def train_model(world: World, cfg: Mapping[str, Any]) -> tuple[Model, TrainStats
 
         _momentum_step(
             model, dW, db, vW, vb,
-            lr=lr, inv_batch=inv_batch, clip=clip,
+            norm=norm, lr=lr, inv_batch=inv_batch, clip=clip,
             momentum=mu, weight_decay=wd,
         )
 
