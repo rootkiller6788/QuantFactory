@@ -35,6 +35,7 @@ __all__ = [
     "Model",
     "init_model",
     "forward",
+    "forward_logits",
     "logits_of",
     "predict",
     "accuracy",
@@ -165,26 +166,48 @@ def init_model(world: World, cfg: Mapping[str, Any]) -> Model:
 # --------------------------------------------------------------------------- #
 
 
+def _forward(
+    model: Model, x: Sequence[float], *, keep_acts: bool
+) -> tuple[list[float], list[list[float]] | None]:
+    """前向的唯一实现。`keep_acts=False` 时不保留逐层激活，供纯推理使用。
+
+    局部绑定 `sumprod` / `tanh` 是为了让热点循环里的名称解析发生在函数入口，
+    而不是每次内积、每个激活元素各查一次模块全局。数值与顺序完全不变。
+    """
+    sumprod = _sumprod
+    tanh = math.tanh
+    a: list[float] = list(x)
+    acts: list[list[float]] | None = [a] if keep_acts else None
+    for layer in model.layers:
+        b = layer.b
+        z = [sumprod(row, a) + b[o] for o, row in enumerate(layer.W)]
+        a = [tanh(v) for v in z] if layer.activation == "tanh" else z
+        if keep_acts:
+            acts.append(a)  # type: ignore[union-attr]
+    return a, acts
+
+
 def forward(model: Model, x: Sequence[float]) -> tuple[list[float], list[list[float]]]:
     """返回 `(logits, acts)`，`acts[0] == x`，`acts[i]` 是第 i 层输出。
 
     **`acts` 是校准需要的**（GPTQ 的 Hessian 与 AWQ 的激活幅度都从它来），
     所以这里一并返回，不要在校准里再跑一遍前向。
     """
-    a: list[float] = list(x)
-    acts: list[list[float]] = [a]
-    for layer in model.layers:
-        z = [_sumprod(layer.W[o], a) + layer.b[o] for o in range(len(layer.W))]
-        if layer.activation == "tanh":
-            a = [math.tanh(v) for v in z]
-        else:
-            a = z
-        acts.append(a)
-    return a, acts
+    a, acts = _forward(model, x, keep_acts=True)
+    return a, acts  # type: ignore[return-value]
+
+
+def forward_logits(model: Model, x: Sequence[float]) -> list[float]:
+    """只算 logits，**不构造 `acts`**。
+
+    度量阶段每个候选要跑 512 条测试样本；那里只需要 argmax，保留逐层激活
+    是纯浪费（每个样本多 4 次列表分配与全部激活元素的 append）。
+    """
+    return _forward(model, x, keep_acts=False)[0]
 
 
 def logits_of(model: Model, x: Sequence[float]) -> list[float]:
-    return forward(model, x)[0]
+    return forward_logits(model, x)
 
 
 def predict(model: Model, x: Sequence[float]) -> int:
