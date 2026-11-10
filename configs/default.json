@@ -1,0 +1,190 @@
+{
+  "acceptance": {
+    "max_effective_bits_violations": 0,
+    "max_fp16_invariance_violations": 0,
+    "max_frontier_dominated": 0,
+    "max_idempotence_violations": 0,
+    "max_matrix_gaps": 0,
+    "max_memory_axis_frontier_delta": 0,
+    "max_quality_above_fp16_se": 1.5,
+    "max_rtn_calibration_violations": 0,
+    "max_test_calib_overlap": 0,
+    "min_candidates": 100,
+    "min_frontier_algorithms": 3,
+    "min_frontier_precisions": 3,
+    "min_frontier_size": 6
+  },
+  "deployment": {
+    "base_params_b": 7.0,
+    "latency_limit_ms": 120.0,
+    "memory_limit_gb": 8.0
+  },
+  "expectations": {
+    "algorithm_gap_widens_at_low_bits": true,
+    "awq_beats_gptq_at_int2": true,
+    "calibration_free_algorithms_are_competitive": true,
+    "frontier_uses_every_algorithm": true,
+    "gptq_beats_rtn_at_low_bits": true,
+    "int2_is_unusable": true,
+    "int8_is_almost_free": true,
+    "knee_point_is_the_best_deployment_choice": true,
+    "kquant_has_the_smallest_metadata": true,
+    "lower_bits_lose_more_quality": true,
+    "memory_is_an_independent_axis": true,
+    "metadata_dominates_at_small_groups": true,
+    "more_calibration_helps": true,
+    "smaller_group_costs_latency": true,
+    "smaller_group_improves_quality": true
+  },
+  "matrix": {
+    "diff_axes": [
+      "precision",
+      "group",
+      "algorithm",
+      "calib"
+    ],
+    "hv_ref_margin": 0.1,
+    "knee_axes": [
+      0,
+      3
+    ],
+    "sensitivity_axis": "calib"
+  },
+  "quant": {
+    "awq": {
+      "alpha": 0.5,
+      "grid": 21
+    },
+    "bit_widths": {
+      "int2": 2,
+      "int3": 3,
+      "int4": 4,
+      "int5": 5,
+      "int6": 6,
+      "int8": 8
+    },
+    "eps": 1e-12,
+    "gptq": {
+      "damp": 0.01
+    },
+    "kquant": {
+      "layer_mix": {
+        "head": 2,
+        "layer0": 1,
+        "layer1": 0
+      },
+      "super_block": 128,
+      "super_scale_bits": 16
+    },
+    "metadata_bits": {
+      "awq": {
+        "per_channel_scale": 16,
+        "per_group_scale": 16,
+        "per_group_zero": 0
+      },
+      "gptq": {
+        "per_channel_scale": 0,
+        "per_group_scale": 16,
+        "per_group_zero": 16
+      },
+      "kquant": {
+        "per_channel_scale": 0,
+        "per_group_scale": 8,
+        "per_group_zero": 0
+      },
+      "rtn": {
+        "per_channel_scale": 0,
+        "per_group_scale": 16,
+        "per_group_zero": 16
+      }
+    }
+  },
+  "runtime": {
+    "activation_mb": 420.0,
+    "bandwidth_gbps": 200.0,
+    "base_group_for_dequant": 128,
+    "dequant_penalty_per_block": 0.06,
+    "fixed_latency_ms": 3.0,
+    "fixed_memory_mb": 480.0,
+    "kernel_efficiency": {
+      "awq": 0.96,
+      "fp16": 1.0,
+      "gptq": 0.94,
+      "kquant": 0.9,
+      "rtn": 1.0
+    }
+  },
+  "seed": 20261003,
+  "space": {
+    "algorithms": [
+      "rtn",
+      "gptq",
+      "awq",
+      "kquant"
+    ],
+    "calib_sizes": {
+      "awq": [
+        64,
+        256
+      ],
+      "gptq": [
+        64,
+        256
+      ],
+      "kquant": [
+        0
+      ],
+      "rtn": [
+        0
+      ]
+    },
+    "groups": [
+      16,
+      32,
+      64
+    ],
+    "include_fp16_baseline": true,
+    "precisions": [
+      "int2",
+      "int3",
+      "int4",
+      "int5",
+      "int6",
+      "int8"
+    ]
+  },
+  "train": {
+    "batch": 48,
+    "grad_clip": 4.0,
+    "init_scale": 0.3,
+    "lr": 0.2,
+    "momentum": 0.9,
+    "steps": 550,
+    "weight_decay": 0.001
+  },
+  "world": {
+    "channel_scale_sigma": 0.9,
+    "d_in": 64,
+    "hidden": [
+      64,
+      64
+    ],
+    "n_calib_pool": 384,
+    "n_classes": 8,
+    "n_prototypes": 24,
+    "n_test": 512,
+    "n_train": 2400,
+    "narrow_dims": [
+      7,
+      41
+    ],
+    "narrow_scale": 0.18,
+    "noise": 1.1,
+    "wide_dims": [
+      19,
+      53
+    ],
+    "wide_scale": 3.2,
+    "wide_spread_ratio": 0.05
+  }
+}
