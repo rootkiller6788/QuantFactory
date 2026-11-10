@@ -70,6 +70,7 @@ def _momentum_step(
     db: Sequence[Sequence[float]],
     vW: list[list[list[float]]],
     vb: list[list[float]],
+    W_T: list[list[list[float]]],
     *,
     norm: float,
     lr: float,
@@ -82,12 +83,17 @@ def _momentum_step(
 
     `norm` 由调用方传入 —— 训练循环本来就要记录它、判断裁剪是否触发，
     在这里重算一遍等于每一步把全部梯度再扫一次。
+
+    `W_T` 与权重**同步更新**（`W_T[j][o] = W[o][j]`）。反向要用当前权重的转置，
+    所以原实现在每一步开头都重新转置一次（本模型约 670 万次索引赋值/训练）；
+    既然这里已经在逐个元素更新 `W`，顺手写进 `W_T`，就省掉那一整遍。
     """
     scale = (clip / norm) if (norm > clip > 0.0) else 1.0
     k = lr * inv_batch * scale
 
     for l in range(len(model.layers)):
         layer = model.layers[l]
+        WTl = W_T[l]
         for o in range(len(layer.W)):
             row = layer.W[o]
             vrow = vW[l][o]
@@ -96,6 +102,7 @@ def _momentum_step(
                 v = momentum * vrow[j] - k * drow[j]
                 vrow[j] = v
                 row[j] += v - lr * weight_decay * row[j]
+                WTl[j][o] = row[j]
             v = momentum * vb[l][o] - k * db[l][o]
             vb[l][o] = v
             layer.b[o] += v - lr * weight_decay * layer.b[o]
@@ -112,6 +119,9 @@ def train_model(world: World, cfg: Mapping[str, Any]) -> tuple[Model, TrainStats
 
     model = init_model(world, cfg)
     rng = Rng(derive_seed("quantfactory.train", int(cfg["seed"])))
+
+    # `W_T` 只在这里转置一次；之后由 `_momentum_step` 随权重就地维护。
+    W_T = transpose_weights(model)
 
     vW = [[[0.0] * len(l.W[0]) for _ in range(len(l.W))] for l in model.layers]
     vb = [[0.0] * len(l.b) for l in model.layers]
@@ -133,7 +143,6 @@ def train_model(world: World, cfg: Mapping[str, Any]) -> tuple[Model, TrainStats
         X = [world.train_x[i] for i in idx]
         Y = [world.train_y[i] for i in idx]
 
-        W_T = transpose_weights(model)
         dW, db = batch_grads(model, W_T, X, Y)
 
         norm = grad_norm(dW, db, inv_batch=inv_batch)
@@ -152,7 +161,7 @@ def train_model(world: World, cfg: Mapping[str, Any]) -> tuple[Model, TrainStats
             last_loss = cur
 
         _momentum_step(
-            model, dW, db, vW, vb,
+            model, dW, db, vW, vb, W_T,
             norm=norm, lr=lr, inv_batch=inv_batch, clip=clip,
             momentum=mu, weight_decay=wd,
         )
