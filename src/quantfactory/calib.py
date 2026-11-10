@@ -184,18 +184,19 @@ def build_calib(
     X = pool[:n]
     n_layers = len(model.layers)
 
-    # ---- 收集每层的输入激活（转置存：acts_T[i][j][b]）
-    acts_T: list[list[list[float]]] = [
-        [[] for _ in range(len(model.layers[i].W[0]))] for i in range(n_layers)
-    ]
+    # ---- 收集每层的输入激活（先按样本追加，最后一次性转置：acts_T[i][j][b]）
+    acts_by_layer: list[list[list[float]]] = [[] for _ in range(n_layers)]
     for x in X:
         a: list[float] = list(x)
         for i, layer in enumerate(model.layers):
-            Ti = acts_T[i]
-            for j in range(len(a)):
-                Ti[j].append(a[j])
+            acts_by_layer[i].append(a)
             z = [_sumprod(layer.W[o], a) + layer.b[o] for o in range(len(layer.W))]
             a = [math.tanh(v) for v in z] if layer.activation == "tanh" else z
+    # `zip(*samples)` 是 C 层的批量转置；逐样本逐通道 `append` 的写法要跑
+    # n × Σ(in_dim) 次 Python 级调用。两种写法产出的数据与顺序完全一致。
+    acts_T: list[list[list[float]]] = [
+        [list(col) for col in zip(*seq)] for seq in acts_by_layer
+    ]
 
     damp = float(cfg["quant"]["gptq"]["damp"])
     eps = float(cfg["quant"]["eps"])
