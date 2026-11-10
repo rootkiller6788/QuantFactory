@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantfactory"
+version = "1.0.0"
+description = "QuantFactory —— 精度设计空间工厂：校准 → 量化(×算法×位宽×分组) → 导出 → 四维评测 → Pareto（零第三方依赖）"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+# 重型接入点一律写成抛 NotImplementedError 的扩展点，不放进核心链路。
+torch = ["torch>=2.2"]
+plot = ["matplotlib>=3.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"

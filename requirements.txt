@@ -1,0 +1,8 @@
+# 核心链路零第三方依赖：python main.py run 直接可跑。
+#
+# 下面这些只在「接入真实模型/绘图」时才需要，核心链路不 import 它们。
+# torch>=2.2
+# matplotlib>=3.8
+#
+# 版本下限的理由：math.sumprod 自 CPython 3.12 起提供，而它是本项目
+# 前向/反向内积的唯一实现（比手写循环快约 2.5 倍）。3.11 上会直接 ImportError。
