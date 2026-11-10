@@ -145,14 +145,19 @@ def _damp(H: list[list[float]], damp: float) -> float:
 
 
 def _max_residual(H: Sequence[Sequence[float]], Hinv: Sequence[Sequence[float]]) -> float:
-    """`max|H·H⁻¹ − I|`。**这是求逆写错的唯一探针。**"""
+    """`max|H·H⁻¹ − I|`。**这是求逆写错的唯一探针。**
+
+    `H·H⁻¹` 的第 `(i, k)` 项是 `H[i]` 与 `H⁻¹` 第 `k` **列**的内积。
+    先把 `H⁻¹` 转置一次，列就变成行 —— 否则内层每次都要重建一条长度 n 的列，
+    合计 `n²` 次列表构造。转置不改变任何元素的求和顺序，结果逐位相同。
+    """
     n = len(H)
+    Hinv_T = [[Hinv[j][k] for j in range(n)] for k in range(n)]
     worst = 0.0
     for i in range(n):
         Hi = H[i]
         for k in range(n):
-            col = [Hinv[j][k] for j in range(n)]
-            v = _sumprod(Hi, col) - (1.0 if i == k else 0.0)
+            v = _sumprod(Hi, Hinv_T[k]) - (1.0 if i == k else 0.0)
             worst = max(worst, abs(v))
     return worst
 
