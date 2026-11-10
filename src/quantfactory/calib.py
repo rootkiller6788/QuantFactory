@@ -46,7 +46,6 @@ _sumprod = math.sumprod
 class CalibStats:
     n: int
     act_absmean: list[list[float]]          # 每层 (in,)
-    act_rms: list[list[float]]              # 每层 (in,)
     hessian: list[list[list[float]]]        # 每层 (in, in)，已阻尼
     hessian_inv: list[list[list[float]]]    # 每层 (in, in)
     diag_condition: list[float]             # 每层：对角 max/min（**对角近似**）
@@ -202,7 +201,6 @@ def build_calib(
     eps = float(cfg["quant"]["eps"])
 
     absmean: list[list[float]] = []
-    rms: list[list[float]] = []
     hessians: list[list[list[float]]] = []
     hessians_inv: list[list[list[float]]] = []
     conds: list[float] = []
@@ -211,7 +209,6 @@ def build_calib(
     for i in range(n_layers):
         Ti = acts_T[i]
         absmean.append([math.fsum(abs(v) for v in col) / n for col in Ti])
-        rms.append([math.sqrt(math.fsum(v * v for v in col) / n) for col in Ti])
 
         H = hessian_of(Ti, n)
         _damp(H, damp)
@@ -226,7 +223,6 @@ def build_calib(
     return CalibStats(
         n=n,
         act_absmean=absmean,
-        act_rms=rms,
         hessian=hessians,
         hessian_inv=hessians_inv,
         diag_condition=conds,
