@@ -45,6 +45,8 @@ from .schema import QuantSpec
 __all__ = [
     "DEFAULTS",
     "PROTOCOL_KEYS",
+    "IMPLEMENTED_ALGORITHMS",
+    "CALIBRATION_FREE_ALGORITHMS",
     "protocol_digest",
     "version_digest",
     "default_config",
@@ -69,6 +71,14 @@ PROTOCOL_KEYS: tuple[str, ...] = (
     "acceptance",
     "expectations",
 )
+
+# `quantize()` 真正实现了的算法。放在配置层，是为了让 `validate_config`
+# 在**训练之前**拒绝拼错的算法名 —— 否则要等世界造好、基座训完（几十秒），
+# 才在候选循环里抛「未知算法」。
+IMPLEMENTED_ALGORITHMS: tuple[str, ...] = ("rtn", "gptq", "awq", "kquant")
+
+# 不读激活统计的算法：它们的校准档位必须是 0，否则会白算一份没人用的校准。
+CALIBRATION_FREE_ALGORITHMS: frozenset[str] = frozenset({"rtn", "kquant"})
 
 
 DEFAULTS: dict[str, Any] = {
@@ -340,6 +350,22 @@ def validate_config(cfg: Mapping[str, Any]) -> list[str]:
     if not groups:
         bad.append("space.groups 不能为空")
 
+    # 算法名必须是真正实现了的。拼错的名字若碰巧有元数据定义，会一路跑到
+    # 候选循环里才炸 —— 那时世界已造好、基座已训完（几十秒白跑）。
+    for a in algs:
+        if a not in IMPLEMENTED_ALGORITHMS:
+            bad.append(
+                f"未知算法 {a!r}（已实现：{', '.join(IMPLEMENTED_ALGORITHMS)}）"
+            )
+
+    # 轴上重复的取值会枚举出重复的设计点：矩阵里出现两行一样的东西，
+    # 前沿与 Diff 的计数都会静默失真。
+    for name, vals in (
+        ("algorithms", algs), ("precisions", precs), ("groups", groups)
+    ):
+        if len(set(vals)) != len(vals):
+            bad.append(f"space.{name} 有重复取值：{vals}")
+
     # 每个精度都要有位宽定义 —— 否则会在枚举中途 KeyError（离原因很远）
     for p in precs:
         if p not in quant["bit_widths"]:
@@ -368,6 +394,21 @@ def validate_config(cfg: Mapping[str, Any]) -> list[str]:
                     f"算法 {a!r} 的校准档位 {lv} 超过校准池 "
                     f"{cfg['world']['n_calib_pool']}"
                 )
+
+        # 校准策略必须与算法事实一致：RTN / K-quant 不读激活，
+        # GPTQ / AWQ 没有校准就无法构建 Hessian 或激活幅度。
+        positive = [int(lv) for lv in levels if int(lv) > 0]
+        if a in CALIBRATION_FREE_ALGORITHMS:
+            if positive:
+                bad.append(
+                    f"算法 {a!r} 不读激活统计，校准档位必须为 0，得到 {levels}"
+                )
+        elif a in IMPLEMENTED_ALGORITHMS and not positive:
+            bad.append(f"算法 {a!r} 需要正校准档位，得到 {levels}")
+
+    # `calib_sizes` 里多出来的算法键不会被枚举，只会让人误以为它被跑过。
+    for a in sorted(set(space["calib_sizes"]) - set(algs)):
+        bad.append(f"space.calib_sizes 含不在 algorithms 里的算法 {a!r}")
 
     # 分组必须能整除（或小于）最窄的权重矩阵的 in 维，否则分组语义会静默退化
     d_in = int(cfg["world"]["d_in"])
