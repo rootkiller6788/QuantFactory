@@ -311,11 +311,13 @@ def batch_grads(
         if i == 0:
             break
         # dL/dz_prev[j] = (Σ_o D[b][o]·W[i][o][j]) · tanh'(z_prev[j])
-        zprev = Zs[i - 1]
+        # `As[i]` 就是第 i 层的输入，即 `tanh(z_prev)` —— 前向已经算过。
+        # 这里复用它，省掉反向里 B×in 次重复的 `math.tanh`（本模型 3.4M 次/训练）。
+        Aprev = As[i]
         WT = W_T[i]
         D = [
             [
-                _sumprod(D[b], WT[j]) * (1.0 - math.tanh(zprev[b][j]) ** 2)
+                _sumprod(D[b], WT[j]) * (1.0 - Aprev[b][j] ** 2)
                 for j in range(in_i)
             ]
             for b in range(B)
