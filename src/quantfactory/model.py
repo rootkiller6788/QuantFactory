@@ -252,15 +252,17 @@ def batch_grads(
     W_T: Sequence[Sequence[Sequence[float]]],
     X: Sequence[Sequence[float]],
     Y: Sequence[int],
-) -> tuple[list[list[list[float]]], list[list[float]]]:
-    """一批样本的梯度（求和，不取平均）。
+) -> tuple[list[list[list[float]]], list[list[float]], list[list[float]]]:
+    """一批样本的梯度（求和，不取平均），以及前向的末层 logits。
 
     ⚠️ **求和口径**是刻意的：调用方（`train.py`）最后统一 `scale(1/B)`。
     如果这里取平均、调用方又除一次，学习率会静默缩水 B 倍 —— 这正是
     `DistillFactory` 坑 219 的形态（上游梯度被多除一次，声明的权重缩水 40 倍）。
     口径写在函数名旁边，比写在注释里管用。
 
-    返回 `(dW, db)`，形状与 `model.layers` 一致。
+    返回 `(dW, db, logits)`：前两个形状与 `model.layers` 一致；`logits[b]`
+    是第 b 个样本的末层前向输出（`Zs[-1][b]`）。前向本来就要算它，
+    调用方（损失采样）直接复用，不必再跑一遍 `logits_of`。
 
     ## `dW` 也必须走 `sumprod`（第一版这里是纯 Python 三重循环）
 
@@ -322,7 +324,7 @@ def batch_grads(
             ]
             for b in range(B)
         ]
-    return dW, db
+    return dW, db, [Zs[L - 1][b] for b in range(B)]
 
 
 def grad_norm(

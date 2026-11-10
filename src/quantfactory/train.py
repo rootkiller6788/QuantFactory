@@ -143,7 +143,7 @@ def train_model(world: World, cfg: Mapping[str, Any]) -> tuple[Model, TrainStats
         X = [world.train_x[i] for i in idx]
         Y = [world.train_y[i] for i in idx]
 
-        dW, db = batch_grads(model, W_T, X, Y)
+        dW, db, logits = batch_grads(model, W_T, X, Y)
 
         norm = grad_norm(dW, db, inv_batch=inv_batch)
         norms.append(norm)
@@ -151,9 +151,8 @@ def train_model(world: World, cfg: Mapping[str, Any]) -> tuple[Model, TrainStats
             clip_hits += 1
 
         if step == 0 or step % sample_every == 0 or step == steps - 1:
-            from .model import logits_of
-
-            ls = [cross_entropy(logits_of(model, x), y) for x, y in zip(X, Y)]
+            # `batch_grads` 的前向已经算出末层 logits，直接复用。
+            ls = [cross_entropy(lg, y) for lg, y in zip(logits, Y)]
             cur = math.fsum(ls) / len(ls)
             curve.append(cur)
             if step == 0:
