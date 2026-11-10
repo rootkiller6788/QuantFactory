@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -65,13 +66,27 @@ def render(v: Any) -> str:
 
 
 def write_outputs(out_dir: str | Path, products: Mapping[str, Any]) -> list[str]:
-    """写出全部产物，返回**实际写下的相对路径**（升序）。"""
+    """写出全部产物，返回**实际写下的相对路径**（升序）。
+
+    **每个文件先写同目录临时文件，再 `os.replace` 原子改名。**
+    产物契约说版本化文件「要么是这一次运行的完整结果，要么不存在」；直接
+    `write_text` 在写到一半被打断时，会留下一个字节不全、却仍然能通过
+    文件名与 JSON 前缀看起来合法的产物 —— 下一次只读命令会把它当成有效结果。
+    临时文件名带 pid，避免两个进程同时写同一个 `out/` 时互相覆盖。
+    """
     root = Path(out_dir)
     root.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
     for rel in sorted(products):
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(render(products[rel]), encoding="utf-8", newline="\n")
+        text = render(products[rel])
+        tmp = p.with_name(f".{p.name}.{os.getpid()}.tmp")
+        try:
+            tmp.write_text(text, encoding="utf-8", newline="\n")
+            os.replace(tmp, p)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
         written.append(str(rel).replace("\\", "/"))
     return written
